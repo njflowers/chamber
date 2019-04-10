@@ -13,11 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
 )
 
-const (
-	// DefaultKeyID is the default alias for the KMS key used to encrypt/decrypt secrets
-	DefaultKeyID = "alias/parameter_store_key"
-)
-
 // validPathKeyFormat is the format that is expected for key names inside parameter store
 // when using paths
 var validPathKeyFormat = regexp.MustCompile(`^(\/[\w\-\.]+)+$`)
@@ -32,8 +27,9 @@ var _ Store = &SSMStore{}
 // SSMStore implements the Store interface for storing secrets in SSM Parameter
 // Store
 type SSMStore struct {
-	svc      ssmiface.SSMAPI
-	usePaths bool
+	svc      		ssmiface.SSMAPI
+	usePaths 		bool
+	kmsKeyID		*string
 }
 
 // NewSSMStore creates a new SSMStore
@@ -54,22 +50,16 @@ func NewSSMStore(numRetries int) (*SSMStore, error) {
 		usePaths = false
 	}
 
+	var kmsKeyID string = "alias/parameter_store_key"
+	if key := KMSKey(); key != nil {
+		kmsKeyID = *key
+	}
+
 	return &SSMStore{
-		svc:      svc,
-		usePaths: usePaths,
+		svc:      		svc,
+		usePaths: 		usePaths,
+		kmsKeyID: 		&kmsKeyID,
 	}, nil
-}
-
-func (s *SSMStore) KMSKey() string {
-	fromEnv, ok := os.LookupEnv("CHAMBER_KMS_KEY_ALIAS")
-	if !ok {
-		return DefaultKeyID
-	}
-	if !strings.HasPrefix(fromEnv, "alias/") {
-		return fmt.Sprintf("alias/%s", fromEnv)
-	}
-
-	return fromEnv
 }
 
 // Write writes a given value to a secret identified by id.  If the secret
@@ -82,11 +72,13 @@ func (s *SSMStore) Write(id SecretId, value string) error {
 		return err
 	}
 	if err == nil {
-		version = current.Meta.Version + 1
+		if thisVersion, err := strconv.Atoi(current.Meta.Version); err == nil {
+			version = thisVersion + 1
+		}
 	}
 
 	putParameterInput := &ssm.PutParameterInput{
-		KeyId:       aws.String(s.KMSKey()),
+		KeyId:       aws.String(*s.kmsKeyID),
 		Name:        aws.String(s.idToName(id)),
 		Type:        aws.String("SecureString"),
 		Value:       aws.String(value),
@@ -153,7 +145,7 @@ func (s *SSMStore) readVersion(id SecretId, version int) (Secret, error) {
 					Meta: SecretMetadata{
 						Created:   *history.LastModifiedDate,
 						CreatedBy: *history.LastModifiedUser,
-						Version:   thisVersion,
+						Version:   strconv.Itoa(thisVersion),
 						Key:       *history.Name,
 					},
 				}
@@ -396,7 +388,7 @@ func (s *SSMStore) History(id SecretId) ([]ChangeEvent, error) {
 				Type:    getChangeType(version),
 				Time:    *history.LastModifiedDate,
 				User:    *history.LastModifiedUser,
-				Version: version,
+				Version: strconv.Itoa(version),
 			})
 		}
 		return true
@@ -434,7 +426,7 @@ func (s *SSMStore) idToName(id SecretId) string {
 		return fmt.Sprintf("/%s/%s", id.Service, id.Key)
 	}
 
-	return fmt.Sprintf("%s.%s", id.Service, id.Key)
+	return idToName(id)
 }
 
 func (s *SSMStore) validateName(name string) bool {
@@ -461,7 +453,7 @@ func parameterMetaToSecretMeta(p *ssm.ParameterMetadata) SecretMetadata {
 	return SecretMetadata{
 		Created:   *p.LastModifiedDate,
 		CreatedBy: *p.LastModifiedUser,
-		Version:   version,
+		Version:   strconv.Itoa(version),
 		Key:       *p.Name,
 	}
 }

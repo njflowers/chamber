@@ -1,8 +1,11 @@
 package store
 
 import (
+	"os"
 	"errors"
 	"time"
+	"fmt"
+	"strings"
 )
 
 type ChangeEventType int
@@ -47,7 +50,7 @@ type RawSecret struct {
 type SecretMetadata struct {
 	Created   time.Time
 	CreatedBy string
-	Version   int
+	Version   string
 	Key       string
 }
 
@@ -55,7 +58,7 @@ type ChangeEvent struct {
 	Type    ChangeEventType
 	Time    time.Time
 	User    string
-	Version int
+	Version string
 }
 
 type Store interface {
@@ -65,4 +68,27 @@ type Store interface {
 	ListRaw(service string) ([]RawSecret, error)
 	History(id SecretId) ([]ChangeEvent, error)
 	Delete(id SecretId) error
+}
+
+func KMSKey() *string {
+	chamberKey, ok := os.LookupEnv("CHAMBER_KMS_KEY_ALIAS")
+	if !ok {
+		return nil
+	}
+	if !strings.HasPrefix(chamberKey, "alias/") {
+		chamberKey = fmt.Sprintf("alias/%s", chamberKey)
+	}
+
+	return &chamberKey
+}
+
+func(s Secret) toRawSecret() RawSecret {
+	return RawSecret {
+		Value: *s.Value,
+		Key: s.Meta.Key,
+	}
+}
+
+func idToName(id SecretId) string {
+	return fmt.Sprintf("%s.%s", id.Service, id.Key)
 }

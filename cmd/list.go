@@ -83,7 +83,7 @@ func list(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, secret := range secrets {
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s",
 			key(secret.Meta.Key),
 			secret.Meta.Version,
 			secret.Meta.Created.Local().Format(ShortTimeFormat),

@@ -65,7 +65,7 @@ func history(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
 	fmt.Fprintln(w, "Event\tVersion\tDate\tUser")
 	for _, event := range events {
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			event.Type,
 			event.Version,
 			event.Time.Local().Format(ShortTimeFormat),

@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"time"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -172,7 +173,7 @@ func (s *S3Store) Read(id SecretId, version int) (Secret, error) {
 		Meta: SecretMetadata{
 			Created:   val.Created,
 			CreatedBy: val.CreatedBy,
-			Version:   val.Version,
+			Version:   strconv.Itoa(val.Version),
 			Key:       obj.Key,
 		},
 	}, nil
@@ -204,7 +205,7 @@ func (s *S3Store) List(service string, includeValues bool) ([]Secret, error) {
 			Meta: SecretMetadata{
 				Created:   val.Created,
 				CreatedBy: val.CreatedBy,
-				Version:   val.Version,
+				Version:   strconv.Itoa(val.Version),
 				Key:       obj.Key,
 			},
 		}
@@ -255,7 +256,7 @@ func (s *S3Store) History(id SecretId) ([]ChangeEvent, error) {
 			Type:    getChangeType(ix),
 			Time:    secretVersion.Created,
 			User:    secretVersion.CreatedBy,
-			Version: secretVersion.Version,
+			Version: strconv.Itoa(secretVersion.Version),
 		})
 	}
 

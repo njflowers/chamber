@@ -44,6 +44,7 @@ const (
 	NullBackend = "NULL"
 	SSMBackend  = "SSM"
 	S3Backend   = "S3"
+	SMBackend	= "SM"
 
 	BackendEnvVar = "CHAMBER_SECRET_BACKEND"
 	BucketEnvVar  = "CHAMBER_S3_BUCKET"
@@ -67,7 +68,8 @@ func init() {
 		`Backend to use; AKA $CHAMBER_SECRET_BACKEND
 	null: no-op
 	ssm: SSM Parameter Store
-	s3: S3; requires --backend-s3-bucket`,
+	s3: S3; requires --backend-s3-bucket
+	sm: AWS Secrets Manager`,
 	)
 	RootCmd.PersistentFlags().StringVarP(&backendS3BucketFlag, "backend-s3-bucket", "", "", "bucket for S3 backend; AKA $CHAMBER_S3_BUCKET")
 }
@@ -138,6 +140,8 @@ func getSecretStore() (store.Store, error) {
 		s, err = store.NewS3StoreWithBucket(numRetries, bucket)
 	case SSMBackend:
 		s, err = store.NewSSMStore(numRetries)
+	case SMBackend:
+		s, err = store.NewSMStore(numRetries)
 	default:
 		return nil, fmt.Errorf("invalid backend `%s`", backend)
 	}

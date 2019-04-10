@@ -77,7 +77,7 @@ func read(cmd *cobra.Command, args []string) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, '\t', 0)
 	fmt.Fprintln(w, "Key\tValue\tVersion\tLastModified\tUser")
-	fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
+	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 		key,
 		*secret.Value,
 		secret.Meta.Version,
