@@ -44,12 +44,6 @@ func NewSSMStore(numRetries int) (*SSMStore, error) {
 		Region:     region,
 	})
 
-	usePaths := true
-	_, ok := os.LookupEnv("CHAMBER_NO_PATHS")
-	if ok {
-		usePaths = false
-	}
-
 	var kmsKeyID string = "alias/parameter_store_key"
 	if key := KMSKey(); key != nil {
 		kmsKeyID = *key
@@ -57,7 +51,7 @@ func NewSSMStore(numRetries int) (*SSMStore, error) {
 
 	return &SSMStore{
 		svc:      		svc,
-		usePaths: 		usePaths,
+		usePaths: 		shouldUsePaths(),
 		kmsKeyID: 		&kmsKeyID,
 	}, nil
 }
@@ -422,10 +416,6 @@ func (s *SSMStore) listRawViaList(service string) ([]RawSecret, error) {
 }
 
 func (s *SSMStore) idToName(id SecretId) string {
-	if s.usePaths {
-		return fmt.Sprintf("/%s/%s", id.Service, id.Key)
-	}
-
 	return idToName(id)
 }
 

@@ -90,5 +90,17 @@ func(s Secret) toRawSecret() RawSecret {
 }
 
 func idToName(id SecretId) string {
-	return fmt.Sprintf("%s.%s", id.Service, id.Key)
+	return fmt.Sprintf("%s%s", serviceToPrefix(id.Service), id.Key)
+}
+
+func serviceToPrefix(service string) string {
+	if shouldUsePaths() {
+		return fmt.Sprintf("/%s/", service)
+	}
+	return fmt.Sprintf("%s.", service)
+}
+
+func shouldUsePaths() bool {
+	_, ok := os.LookupEnv("CHAMBER_NO_PATHS")
+	return !ok
 }

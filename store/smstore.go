@@ -1,8 +1,6 @@
 package store
 
 import (
-	// "os"
-	"fmt"
 	"strings"
 	"strconv"
 
@@ -78,30 +76,45 @@ func (s *SMStore) listRawSecrets(service string) ([]RawSecret, error) {
 }
 
 func (s *SMStore) listSecrets(service string, includeValues bool) ([]Secret, error) {
+	var nextToken *string = nil
+	secretPrefix := serviceToPrefix(service)
 	secrets := []Secret { }
-	listSecretsInput := &secretsmanager.ListSecretsInput { }
 	
-	if result, err := s.svc.ListSecrets(listSecretsInput); err != nil {
-		return []Secret{}, err
-	} else {
-		for _, entry := range result.SecretList {
-			name := *entry.Name;
-			if strings.HasPrefix(name, fmt.Sprintf("%s.", service)) {
-				id := SecretId {
-					Service: service,
-					Key: name[len(service)+1:],
-				}
+	for {
+		listSecretsInput := &secretsmanager.ListSecretsInput {
+			NextToken: nextToken,
+		}
 
-				if secret, err := s.readSecret(id, -1, includeValues); err != nil {
-					return []Secret {}, err
-				} else {
-					secrets = append(secrets, secret) 
+		result, err := s.svc.ListSecrets(listSecretsInput);
+
+		if err != nil {
+			return []Secret{}, err
+		} else {
+			for _, entry := range result.SecretList {
+				name := *entry.Name;
+
+				if strings.HasPrefix(name, secretPrefix) {
+					id := SecretId {
+						Service: service,
+						Key: name[len(secretPrefix):],
+					}
+
+					if secret, err := s.readSecret(id, -1, includeValues); err != nil {
+						return []Secret {}, err
+					} else {
+						secrets = append(secrets, secret) 
+					}
 				}
 			}
 		}
 
-		return secrets, nil
+		nextToken = result.NextToken
+		if nextToken == nil {
+			break
+		}
 	}
+
+	return secrets, nil
 }
 
 func (s *SMStore) readSecret(id SecretId, versionId int, includeValue bool) (Secret, error) {
