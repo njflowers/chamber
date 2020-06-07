@@ -25,6 +25,7 @@ var (
 	backend             string
 	backendFlag         string
 	backendS3BucketFlag string
+	backendSMUseSSM		string
 
 	analyticsEnabled  bool
 	analyticsWriteKey string
@@ -48,6 +49,7 @@ const (
 
 	BackendEnvVar = "CHAMBER_SECRET_BACKEND"
 	BucketEnvVar  = "CHAMBER_S3_BUCKET"
+	UseSSMEnvVar  = "CHAMBER_SM_USE_SSM"
 )
 
 var Backends = []string{SSMBackend, S3Backend, NullBackend}
@@ -72,6 +74,7 @@ func init() {
 	sm: AWS Secrets Manager`,
 	)
 	RootCmd.PersistentFlags().StringVarP(&backendS3BucketFlag, "backend-s3-bucket", "", "", "bucket for S3 backend; AKA $CHAMBER_S3_BUCKET")
+	RootCmd.PersistentFlags().StringVarP(&backendSMUseSSM, "backend-sm-use-ssm", "", "", "enable usage of SSM APIs to pull secrets; AKA $CHAMBER_SM_USE_SSM")
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -141,7 +144,11 @@ func getSecretStore() (store.Store, error) {
 	case SSMBackend:
 		s, err = store.NewSSMStore(numRetries)
 	case SMBackend:
-		s, err = store.NewSMStore(numRetries)
+		useSSM := false
+		if os.Getenv(UseSSMEnvVar) != "" || backendSMUseSSM != "" {
+			useSSM = true
+		}
+		s, err = store.NewSMStore(numRetries, useSSM)
 	default:
 		return nil, fmt.Errorf("invalid backend `%s`", backend)
 	}

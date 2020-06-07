@@ -777,7 +777,7 @@ func TestValidations(t *testing.T) {
 
 	for _, k := range validPathFormat {
 		t.Run("Path Validation should return true", func(t *testing.T) {
-			result := pathStore.validateName(k)
+			result := validateName(k, pathStore.usePaths)
 			assert.True(t, result)
 		})
 	}
@@ -792,7 +792,7 @@ func TestValidations(t *testing.T) {
 
 	for _, k := range invalidPathFormat {
 		t.Run("Path Validation should return false", func(t *testing.T) {
-			result := pathStore.validateName(k)
+			result := validateName(k, pathStore.usePaths)
 			assert.False(t, result)
 		})
 	}
@@ -814,7 +814,7 @@ func TestValidations(t *testing.T) {
 
 	for _, k := range validNoPathFormat {
 		t.Run("Validation should return true", func(t *testing.T) {
-			result := noPathStore.validateName(k)
+			result := validateName(k, noPathStore.usePaths)
 			assert.True(t, result)
 		})
 	}
@@ -827,7 +827,7 @@ func TestValidations(t *testing.T) {
 
 	for _, k := range invalidNoPathFormat {
 		t.Run("Validation should return false", func(t *testing.T) {
-			result := noPathStore.validateName(k)
+			result := validateName(k, noPathStore.usePaths)
 			assert.False(t, result)
 		})
 	}

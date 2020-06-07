@@ -3,7 +3,6 @@ package store
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -13,14 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
 )
 
-// validPathKeyFormat is the format that is expected for key names inside parameter store
-// when using paths
-var validPathKeyFormat = regexp.MustCompile(`^(\/[\w\-\.]+)+$`)
-
-// validKeyFormat is the format that is expected for key names inside parameter store when
-// not using paths
-var validKeyFormat = regexp.MustCompile(`^[\w\-\.]+$`)
-
 // ensure SSMStore confirms to Store interface
 var _ Store = &SSMStore{}
 
@@ -29,7 +20,7 @@ var _ Store = &SSMStore{}
 type SSMStore struct {
 	svc      		ssmiface.SSMAPI
 	usePaths 		bool
-	kmsKeyID		*string
+	kmsKeyID		string
 }
 
 // NewSSMStore creates a new SSMStore
@@ -52,7 +43,7 @@ func NewSSMStore(numRetries int) (*SSMStore, error) {
 	return &SSMStore{
 		svc:      		svc,
 		usePaths: 		shouldUsePaths(),
-		kmsKeyID: 		&kmsKeyID,
+		kmsKeyID: 		kmsKeyID,
 	}, nil
 }
 
@@ -72,7 +63,7 @@ func (s *SSMStore) Write(id SecretId, value string) error {
 	}
 
 	putParameterInput := &ssm.PutParameterInput{
-		KeyId:       aws.String(*s.kmsKeyID),
+		KeyId:       aws.String(s.kmsKeyID),
 		Name:        aws.String(s.idToName(id)),
 		Type:        aws.String("SecureString"),
 		Value:       aws.String(value),
@@ -232,7 +223,6 @@ func (s *SSMStore) List(service string, includeValues bool) ([]Secret, error) {
 	secrets := map[string]Secret{}
 
 	var describeParametersInput *ssm.DescribeParametersInput
-
 	if s.usePaths {
 		describeParametersInput = &ssm.DescribeParametersInput{
 			ParameterFilters: []*ssm.ParameterStringFilter{
@@ -256,7 +246,7 @@ func (s *SSMStore) List(service string, includeValues bool) ([]Secret, error) {
 
 	err := s.svc.DescribeParametersPages(describeParametersInput, func(resp *ssm.DescribeParametersOutput, lastPage bool) bool {
 		for _, meta := range resp.Parameters {
-			if !s.validateName(*meta.Name) {
+			if !validateName(*meta.Name, s.usePaths) {
 				continue
 			}
 			secretMeta := parameterMetaToSecretMeta(meta)
@@ -272,28 +262,15 @@ func (s *SSMStore) List(service string, includeValues bool) ([]Secret, error) {
 	}
 
 	if includeValues {
-		secretKeys := keys(secrets)
-		for i := 0; i < len(secretKeys); i += 10 {
-			batchEnd := i + 10
-			if i+10 > len(secretKeys) {
-				batchEnd = len(secretKeys)
-			}
-			batch := secretKeys[i:batchEnd]
-
-			getParametersInput := &ssm.GetParametersInput{
-				Names:          stringsToAWSStrings(batch),
-				WithDecryption: aws.Bool(true),
-			}
-
-			resp, err := s.svc.GetParameters(getParametersInput)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, param := range resp.Parameters {
-				secret := secrets[*param.Name]
-				secret.Value = param.Value
-				secrets[*param.Name] = secret
+		secretKeys := keys(secrets, nil)
+		
+		if secretValues, err := getParameters(s.svc, secretKeys); err != nil {
+			return nil, err
+		} else {
+			for key, secret := range secrets {
+				secret.Value = new(string)
+				*secret.Value = secretValues[key]
+				secrets[key] = secret
 			}
 		}
 	}
@@ -314,7 +291,7 @@ func (s *SSMStore) ListRaw(service string) ([]RawSecret, error) {
 
 		err := s.svc.GetParametersByPathPages(getParametersByPathInput, func(resp *ssm.GetParametersByPathOutput, lastPage bool) bool {
 			for _, param := range resp.Parameters {
-				if !s.validateName(*param.Name) {
+				if !validateName(*param.Name, s.usePaths) {
 					continue
 				}
 
@@ -415,15 +392,36 @@ func (s *SSMStore) listRawViaList(service string) ([]RawSecret, error) {
 	return rawSecrets, nil
 }
 
-func (s *SSMStore) idToName(id SecretId) string {
-	return idToName(id)
+func getParameters(s ssmiface.SSMAPI, secretKeys []string) (map[string]string, error) {
+	secrets := map[string]string {}
+	
+	for i := 0; i < len(secretKeys); i += 10 {
+		batchEnd := i + 10
+		if i+10 > len(secretKeys) {
+			batchEnd = len(secretKeys)
+		}
+		batch := secretKeys[i:batchEnd]
+
+		getParametersInput := &ssm.GetParametersInput{
+			Names:          stringsToAWSStrings(batch),
+			WithDecryption: aws.Bool(true),
+		}
+
+		resp, err := s.GetParameters(getParametersInput)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, param := range resp.Parameters {
+			secrets[*param.Name] = *param.Value
+		}
+	}
+
+	return secrets, nil
 }
 
-func (s *SSMStore) validateName(name string) bool {
-	if s.usePaths {
-		return validPathKeyFormat.MatchString(name)
-	}
-	return validKeyFormat.MatchString(name)
+func (s *SSMStore) idToName(id SecretId) string {
+	return idToName(id, s.usePaths)
 }
 
 func basePath(key string) string {
@@ -446,22 +444,6 @@ func parameterMetaToSecretMeta(p *ssm.ParameterMetadata) SecretMetadata {
 		Version:   strconv.Itoa(version),
 		Key:       *p.Name,
 	}
-}
-
-func keys(m map[string]Secret) []string {
-	keys := []string{}
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-func values(m map[string]Secret) []Secret {
-	values := []Secret{}
-	for _, v := range m {
-		values = append(values, v)
-	}
-	return values
 }
 
 func stringsToAWSStrings(slice []string) []*string {
